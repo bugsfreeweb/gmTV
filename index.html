@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Watch free TV online with our IPTV player. Live channel streaming, easy to use, no downloads. HD digital TV straight to your browser.">
+  <meta name="keywords" content="iptv player, online tv, live channels, streaming tv, m3u player, iptv list, free tv, watch tv online, tv channels, iptv world">   
+  
+  <title>GM TV : Start your day with GM TV online</title>
+  
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="./css/styles.css">
+  <!-- Favicon -->
+    <link rel="icon" type="image/png" href="./img/gmtv.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">    
+    <link rel="apple-touch-icon" href="./img/icon-192x192.png">
+  <!-- Feather Icons and player libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.1.4/dist/hls.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dashjs/dist/dash.all.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+</head>
+<body>
+<div class="iptv-root">
+  <div class="iptv-player-area" id="iptv-player-area" aria-label="IPTV Player" role="region">
+    <div class="default-playlist-bar" id="default-playlist-bar">
+      <div class="bar-group-left">
+        <button class="theme-btn" id="theme-switch-btn" aria-label="Switch Theme" role="button" title="Switch Theme"><i data-feather="moon"></i></button>
+        <button class="favorite-mode-btn" id="favorite-mode-btn" aria-label="Favorite Mode" role="button" title="Favorite Playlist"><i data-feather="star"></i></button>
+        <button id="history-btn" aria-label="Show Upload History" role="button" title="Playlist Histories"><i data-feather="clock"></i></button>
+        <button id="show-upload-panel-btn" aria-label="Upload Playlist" role="button" title="Upload Playlist"><i data-feather="upload-cloud"></i></button>
+      </div>
+      <div class="bar-group-main">
+        <div class="playlist-dropdown-wrap" id="playlist-dropdown-wrap">
+          <div class="playlist-dropdown-icon" id="playlist-dropdown-current" title="Select Default Playlist"><i data-feather="layers"></i></div>
+          <div class="playlist-dropdown-list" id="playlist-dropdown-list">
+            <button class="playlist-dd-item" data-val="demo1" title="Default Playlist 1"><i data-feather="tv"></i></button>
+            <button class="playlist-dd-item" data-val="demo2" title="Default Playlist 2"><i data-feather="video"></i></button>
+            <button class="playlist-dd-item" data-val="demo3" title="Default Playlist 3"><i data-feather="film"></i></button>
+          </div>
+        </div>
+      </div>
+      <div class="bar-group-right">
+        <button class="default-playlist-btn" id="show-playlist-slider-btn" aria-label="Show Channel List" role="button" title="Show Playlist">
+          <i data-feather="list"></i>
+        </button>
+      </div>
+    </div>
+    <div class="player-container" id="player-container">
+      <video id="video-player" controls
+        aria-label="Video Player"
+        poster="./img/player-poster.png"></video>
+      <div class="notice-overlay fade-enter fade-enter-active" id="notice-overlay" aria-live="polite">
+        <div id="notice-text-msg"></div>
+        <div class="notice-actions" id="notice-actions"></div>
+      </div>
+      <div class="loading-overlay" id="loading-overlay" style="display:none;">
+        <div class="spinner" aria-label="Loading"></div>
+        <p id="loading-text">Loading...</p>
+      </div>
+      <div class="snackbar" id="snackbar"></div>
+      <div class="player-controls">
+        <button class="control-btn" id="play-pause-btn" aria-label="Play/Pause" role="button"><i data-feather="play"></i></button>
+        <button class="control-btn" id="mute-btn" aria-label="Mute/Unmute" role="button"><i data-feather="volume-2"></i></button>
+        <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1" style="width:70px;margin-right:8px;" aria-label="Volume slider">
+        <div class="channel-info-flex">
+          <div class="channel-title" id="current-channel"></div>
+          <div class="channel-status" id="player-status"></div>
+        </div>
+        <button class="control-btn fullscreen-btn" id="fullscreen-btn" aria-label="Fullscreen" role="button"><i data-feather="maximize"></i></button>
+      </div>
+    </div>
+    <div class="upload-panel-bg" id="upload-panel-bg">
+      <form class="upload-panel" id="upload-panel" autocomplete="off" onsubmit="return false;" aria-label="Upload playlist panel">
+        <button class="panel-close" id="close-upload-panel-btn" aria-label="Close upload panel" role="button"><i data-feather="x"></i></button>
+        <h2><i data-feather="upload"></i> Upload Playlist</h2>
+        <label for="file-upload-input" class="file-upload-label" id="file-upload-label" aria-label="Upload playlist file">
+          <i data-feather="file-text"></i> Choose File (m3u, txt, json, mpd, hls, ts, mp4, m3u8)
+        </label>
+        <input type="file" id="file-upload-input" accept=".m3u,.txt,.json,.mpd,.hls,.ts,.mp4,.m3u8,application/json,video/mp4,application/x-mpegURL,.ts,.hls" />
+        <div class="upload-drop-info">or drag & drop here</div>
+        <div class="or-upload">Or Enter Playlist/Media URL</div>
+        <div class="url-upload-group">
+          <input id="url-upload-input" class="url-upload-input" type="text" placeholder="http://...m3u8 / .ts / .mp4 / .mpd" aria-label="Playlist or media URL">
+          <button class="url-upload-btn" id="upload-url-btn" type="submit"><i data-feather="play-circle"></i> Load</button>
+        </div>
+        <div class="big-upload-progress" id="upload-progress-bar" style="display:none;"><div class="bar" id="upload-progress-bar-fill"></div></div>
+      </form>
+    </div>
+    <div id="history-modal-bg">
+      <div id="history-modal" aria-label="Upload History">
+        <h2><i data-feather="clock"></i> Upload History</h2>
+        <div class="history-list" id="history-list"></div>
+        <button class="bulkbtn" id="clear-all-history"><i data-feather="trash-2"></i> Clear All Upload History</button>
+      </div>
+    </div>
+  </div>
+  <div class="playlist-slider" id="playlist-slider">
+    <div class="playlist-header">
+      <div class="playlist-header-main">
+        <h3><i data-feather="tv"></i> Channel List</h3>
+        <span class="playlist-counts" id="playlist-counts"></span>
+      </div>
+      <button class="close-slider-btn" id="close-playlist-slider-btn" aria-label="Close playlist slider" role="button"><i data-feather="x"></i></button>
+    </div>
+    <div class="channels-list" id="channels-list"></div>
+  </div>
+</div>
+<script src="./js/iptv.js"></script>
+</body>
+</html>
