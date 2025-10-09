@@ -85,11 +85,11 @@ function savePlaylistOffline(key,txt) {
 }
 window.addEventListener('offline',()=>{ showSnackbar("Offline: Local playlists available",'warn'); });
 
-// Default demo playlists (updated to working iptv-org streams as of 2025)
+// Default demo playlists
 let defaultListIcons = [
-  {val:'demo1',icon:'<i data-feather="tv"></i>', m3u:"https://iptv-org.github.io/iptv/countries/br.m3u"},
-  {val:'demo2',icon:'<i data-feather="video"></i>', m3u:"https://iptv-org.github.io/iptv/categories/sports.m3u"},
-  {val:'demo3',icon:'<i data-feather="film"></i>', m3u:"https://iptv-org.github.io/iptv/categories/movies.m3u"}
+  {val:'demo1',icon:'<i data-feather="tv"></i>', m3u:"https://raw.githubusercontent.com/bugsfreeweb/LiveTVCollector/main/BugsfreeStreams/Output/StreamLinks-BR.m3u"},
+  {val:'demo2',icon:'<i data-feather="video"></i>', m3u:"https://raw.githubusercontent.com/bugsfreeweb/LiveTVCollector/main/BugsfreeStreams/Output/StreamLinks-ID.m3u"},
+  {val:'demo3',icon:'<i data-feather="film"></i>', m3u:"https://raw.githubusercontent.com/bugsfreeweb/LiveTVCollector/main/BugsfreeStreams/Output/StreamLinks-MXD.m3u"}
 ];
 let selectedPlaylistIdx = 0;
 playlistDropdownCurrent.onclick=function(){
@@ -530,3 +530,4 @@ function swipeChannel(dir) {
 if(window.innerWidth < 600) {
   bar.classList.add('hide');
 }
+
