@@ -38,7 +38,6 @@ const videoPlayer = document.getElementById('video-player');
 const playPauseBtn = document.getElementById('play-pause-btn');
 const muteBtn = document.getElementById('mute-btn');
 const volumeSlider = document.getElementById('volume-slider');
-const progressSlider = document.getElementById('progress-slider');
 const fullscreenBtn = document.getElementById('fullscreen-btn');
 const currentChannel = document.getElementById('current-channel');
 const playerStatus = document.getElementById('player-status');
@@ -305,13 +304,13 @@ function playChannel(channel) {
     loadingOverlay.style.display='none';playerStatus.textContent='DASH Playing';
   } else if(url.match(/\.(m3u8|hls?|ts)$/i)) {
     hls = new Hls(); hls.attachMedia(videoPlayer); hls.loadSource(url);
-    hls.on(Hls.Events.MANIFEST_PARSED,()=>{videoPlayer.play().catch(e=>{showSnackbar("Autoplay failed: "+e.message,'error');});playerStatus.textContent='Now Playing';loadingOverlay.style.display='none';});
+    hls.on(Hls.Events.MANIFEST_PARSED,()=>{videoPlayer.play().catch(()=>{});playerStatus.textContent='Now Playing';loadingOverlay.style.display='none';});
     hls.on(Hls.Events.ERROR,(_,data)=>{if(data.fatal)playerStatus.textContent='Error: '+data.type;});
   } else if(url.match(/\.(mp4)$/i)) {
-    videoPlayer.src=url; videoPlayer.load(); videoPlayer.play().catch(e=>{showSnackbar("Playback failed: "+e.message,'error');});
+    videoPlayer.src=url; videoPlayer.load(); videoPlayer.play();
     loadingOverlay.style.display='none';playerStatus.textContent='Now Playing (MP4)';
   } else {
-    videoPlayer.src=url; videoPlayer.load(); videoPlayer.play().catch(e=>{showSnackbar("Playback failed: "+e.message,'error');});
+    videoPlayer.src=url; videoPlayer.load(); videoPlayer.play();
     loadingOverlay.style.display='none';playerStatus.textContent='Playing';
   }
   updateIcons();
@@ -321,16 +320,6 @@ videoPlayer.onvolumechange = function(){
   muteBtn.innerHTML=`<i data-feather="${videoPlayer.muted?'volume-x':'volume-2'}"></i>`;
   volumeSlider.value = videoPlayer.volume;
   updateIcons();
-};
-videoPlayer.ontimeupdate = function() {
-  if (videoPlayer.duration) {
-    progressSlider.value = (videoPlayer.currentTime / videoPlayer.duration) * 100;
-  }
-};
-progressSlider.oninput = function() {
-  if (videoPlayer.duration) {
-    videoPlayer.currentTime = (this.value / 100) * videoPlayer.duration;
-  }
 };
 playPauseBtn.onclick = () => {videoPlayer.paused?videoPlayer.play():videoPlayer.pause();}
 muteBtn.onclick = () => {
@@ -436,13 +425,12 @@ window.addEventListener('keydown',e=>{
   }
 
   // Keyboard shortcut to change channel left/right
-  if((e.key === "ArrowRight" || e.key === "ArrowLeft") && (channels.length > 1 || allChannels.length > 1) && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") {
-    let activeChannels = channels.length > 1 ? channels : allChannels; // Fallback to all if favorites too small
-    let idx = currentPlayingChannel ? activeChannels.findIndex(c => c.url === currentPlayingChannel.url) : -1;
+  if((e.key === "ArrowRight" || e.key === "ArrowLeft") && channels.length > 1 && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") {
+    let idx = currentPlayingChannel ? channels.findIndex(c => c.url === currentPlayingChannel.url) : -1;
     if (idx === -1) idx = 0;
     let dir = e.key === "ArrowRight" ? 1 : -1;
-    let nextIdx = (idx + dir + activeChannels.length) % activeChannels.length;
-    playChannel(activeChannels[nextIdx]);
+    let nextIdx = (idx + dir + channels.length) % channels.length;
+    playChannel(channels[nextIdx]);
     showHeaderBarForAWhile();
     e.preventDefault();
   }
@@ -519,15 +507,13 @@ document.getElementById('player-container').addEventListener('touchend', functio
   touchStartY = null;
 }, {passive:true});
 function swipeChannel(dir) {
-  let activeChannels = channels.length > 1 ? channels : allChannels; // Fallback for favorites
-  if (activeChannels && activeChannels.length > 1) {
-    let idx = currentPlayingChannel ? activeChannels.findIndex(c => c.url === currentPlayingChannel.url) : -1;
+  if (channels && channels.length > 1) {
+    let idx = currentPlayingChannel ? channels.findIndex(c => c.url === currentPlayingChannel.url) : -1;
     if (idx === -1) idx = 0;
-    let nextIdx = (idx + dir + activeChannels.length) % activeChannels.length;
-    playChannel(activeChannels[nextIdx]);
+    let nextIdx = (idx + dir + channels.length) % channels.length;
+    playChannel(channels[nextIdx]);
   }
 }
 if(window.innerWidth < 600) {
   bar.classList.add('hide');
 }
-
