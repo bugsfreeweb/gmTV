@@ -38,6 +38,7 @@ const videoPlayer = document.getElementById('video-player');
 const playPauseBtn = document.getElementById('play-pause-btn');
 const muteBtn = document.getElementById('mute-btn');
 const volumeSlider = document.getElementById('volume-slider');
+const progressSlider = document.getElementById('progress-slider');
 const fullscreenBtn = document.getElementById('fullscreen-btn');
 const currentChannel = document.getElementById('current-channel');
 const playerStatus = document.getElementById('player-status');
@@ -73,21 +74,22 @@ const noticeTextMsg = document.getElementById('notice-text-msg');
 const noticeActions = document.getElementById('notice-actions');
 
 let sliderOpen = false, barHideT = null, hls = null, dash = null;
-let channels = [], allChannels = [], isFavoriteMode = false;
+let channels = [], allChannels = [], isFavoriteMode = false, currentPlayingChannel = null;
 let favorites = JSON.parse(localStorage.getItem("iptvFavorites")||'[]');
 let uploadHistory = JSON.parse(localStorage.getItem('iptvUploadHistory')||'[]');
 let playlistCache = JSON.parse(localStorage.getItem("iptvPlaylists")||"{}");
+
 function savePlaylistOffline(key,txt) {
   playlistCache[key]=txt;
   localStorage.setItem("iptvPlaylists",JSON.stringify(playlistCache));
 }
 window.addEventListener('offline',()=>{ showSnackbar("Offline: Local playlists available",'warn'); });
 
-// Default demo playlists
+// Default demo playlists (updated to working iptv-org streams as of 2025)
 let defaultListIcons = [
-  {val:'demo1',icon:'<i data-feather="tv"></i>', m3u:"https://raw.githubusercontent.com/bugsfreeweb/LiveTVCollector/main/BugsfreeStreams/Output/StreamLinks-BR.m3u"},
-  {val:'demo2',icon:'<i data-feather="video"></i>', m3u:"https://raw.githubusercontent.com/bugsfreeweb/LiveTVCollector/main/BugsfreeStreams/Output/StreamLinks-ID.m3u"},
-  {val:'demo3',icon:'<i data-feather="film"></i>', m3u:"https://raw.githubusercontent.com/bugsfreeweb/LiveTVCollector/main/BugsfreeStreams/Output/StreamLinks-MXD.m3u"}
+  {val:'demo1',icon:'<i data-feather="tv"></i>', m3u:"https://iptv-org.github.io/iptv/countries/br.m3u"},
+  {val:'demo2',icon:'<i data-feather="video"></i>', m3u:"https://iptv-org.github.io/iptv/categories/sports.m3u"},
+  {val:'demo3',icon:'<i data-feather="film"></i>', m3u:"https://iptv-org.github.io/iptv/categories/movies.m3u"}
 ];
 let selectedPlaylistIdx = 0;
 playlistDropdownCurrent.onclick=function(){
@@ -170,7 +172,7 @@ function handlePlaylistUpload(fileList,type) {
       savePlaylistOffline(f.name, txt);
       uploadPanelBg.classList.remove('open');
       noticeShow("Playlist loaded.<br>Select a channel to start playback.");
-      addUploadHistory({ type: 'file', name: f.name, date: Date.now() });
+      addUploadHistory({ type: 'file', name: f.name, date: Date.now() }, txt);
       autoPlayFirstChannel();
       updateIcons();
     }
@@ -189,17 +191,28 @@ uploadUrlBtn.onclick=(e)=>{
     if(resp.ok)return resp.text(); throw new Error("Network error");
   }).then(txt=>{
     allChannels = channels = parsePlaylist(txt); renderChannels();
-    savePlaylistOffline(url.replace(/\/$/,'').split('/').slice(-1)[0], txt);
+    let lastpart = url.replace(/\/$/,'').split('/').slice(-1)[0].slice(0,64);
+    savePlaylistOffline(lastpart, txt);
     uploadPanelBg.classList.remove('open'); loadingOverlay.style.display='none';
     noticeShow("Playlist loaded.<br>Select a channel to start playback."); autoPlayFirstChannel();
-    let lastpart = url.replace(/\/$/,'').split('/').slice(-1)[0].slice(0,64);
-    addUploadHistory({type:'url',name:lastpart, url:url, date:Date.now()}); updateIcons();
+    addUploadHistory({type:'url',name:lastpart, url:url, date:Date.now()}, txt);
+    updateIcons();
   }).catch(err=>{
     loadingOverlay.style.display='none'; noticeShow("Failed to load: "+err.message); showSnackbar("Failed to load playlist",'error'); updateIcons();
   });
 }
-function addUploadHistory(info) {
+function addUploadHistory(info, txt) {
   uploadHistory = (JSON.parse(localStorage.getItem('iptvUploadHistory')||'[]'));
+  if (txt && txt.length < 400000) {  // up to ~400kb per playlist
+    info.txt = txt;
+  } else if (info.type === 'file' && info.name && txt) {
+    savePlaylistOffline(info.name, txt);
+    info.cacheKey = info.name;
+  } else if (info.type === 'url' && info.url && txt) {
+    let lastpart = info.url.replace(/\/$/, '').split('/').slice(-1)[0];
+    savePlaylistOffline(lastpart, txt);
+    info.cacheKey = lastpart;
+  }
   uploadHistory.push(info);
   if(uploadHistory.length>120)uploadHistory = uploadHistory.slice(-120);
   localStorage.setItem('iptvUploadHistory',JSON.stringify(uploadHistory));
@@ -210,8 +223,8 @@ function parsePlaylist(content) {
   for(let i=0,N=lines.length;i<N;i++) {
     let l=lines[i].trim();
     if(ext==='m3u' && l.startsWith('#EXTINF')) {
-      const params = l.split(',');
-      const name = params.length>1 ? params[params.length-1] : 'Unknown';
+      const lastComma = l.lastIndexOf(',');
+      const name = lastComma > 0 ? l.substring(lastComma + 1).trim() : 'Unknown';
       const tvg = /tvg-name="([^"]+)"/.exec(l)?.[1]||null;
       const group = /group-title="([^"]+)"/.exec(l)?.[1]||null;
       const logo = /tvg-logo="([^"]+)"/.exec(l)?.[1]||null;
@@ -231,10 +244,11 @@ function parsePlaylist(content) {
   return out;
 }
 function renderChannels() {
-  let displayChannels = isFavoriteMode ? allChannels.filter(c=>favorites.find(f=>f.url===c.url)) : allChannels;
+  let displayChannels = isFavoriteMode ? allChannels.filter(c=>favorites.some(f=>f.url===c.url)) : allChannels;
+  channels = displayChannels;
   channelsList.innerHTML='';
-  let total = displayChannels.length,online=0;
-  if(!displayChannels.length) {
+  let total = channels.length,online=0;
+  if(!channels.length) {
     channelsList.innerHTML = `<div class="empty-list"><i data-feather="slash"></i>
       <h4>${isFavoriteMode?'No favorite channels':'No channels loaded'}</h4>
       <p>${isFavoriteMode?'':'Select or upload a playlist above.'}</p></div>`;
@@ -242,7 +256,7 @@ function renderChannels() {
   }
   let fallbackLogo = 'https://bugsfreecdn.netlify.app/BugsfreeDefault/logo.png';
   let f = document.createDocumentFragment();
-  displayChannels.forEach(function(channel){
+  channels.forEach(function(channel){
     let isFav = !!favorites.find(f=>f.url===channel.url);
     const el=document.createElement('div');
     el.className='channel-item'; el.dataset.id=channel.id;
@@ -271,43 +285,59 @@ function renderChannels() {
     f.appendChild(el);
   });
   channelsList.appendChild(f);
-  playlistCounts.textContent = `Total: ${displayChannels.length} | Online: ${online}`; updateIcons();
+  playlistCounts.textContent = `Total: ${channels.length} | Online: ${online}`; updateIcons();
 }
 function selectAndPlayChannel(channel) { playChannel(channel); noticeHide(); }
 function playChannel(channel) {
   if(!channel?.url){return;}
+  currentPlayingChannel = channel;
   loadingOverlay.style.display='flex';loadingText.textContent='Loading: '+(channel.name||"Playing...");
   playerStatus.textContent='Connecting...';
   currentChannel.textContent=channel.name||'Playing Channel...';
-  Array.from(document.getElementsByClassName('channel-item')).forEach(el=>{el.classList.toggle('active',el.dataset.id===channel.id);});
+  document.querySelectorAll('.channel-item.active').forEach(el=>el.classList.remove('active'));
+  const newEl = document.querySelector(`[data-id="${channel.id}"]`);
+  if(newEl) newEl.classList.add('active');
   if(hls){hls.destroy();hls=null;} if(dash){dash.reset();dash=null;}
   const url=channel.url;
   if(url.match(/\.mpd$/i)){
     dash = dashjs.MediaPlayer().create();
     dash.initialize(videoPlayer,url,true);
-    videoPlayer.onplay=videoPlayer.onpause=()=>{playPauseBtn.innerHTML=`<i data-feather="${videoPlayer.paused?'play':'pause'}"></i>`;updateIcons()}
     loadingOverlay.style.display='none';playerStatus.textContent='DASH Playing';
   } else if(url.match(/\.(m3u8|hls?|ts)$/i)) {
     hls = new Hls(); hls.attachMedia(videoPlayer); hls.loadSource(url);
-    hls.on(Hls.Events.MANIFEST_PARSED,()=>{videoPlayer.play().catch(()=>{});playerStatus.textContent='Now Playing';loadingOverlay.style.display='none';});
+    hls.on(Hls.Events.MANIFEST_PARSED,()=>{videoPlayer.play().catch(e=>{showSnackbar("Autoplay failed: "+e.message,'error');});playerStatus.textContent='Now Playing';loadingOverlay.style.display='none';});
     hls.on(Hls.Events.ERROR,(_,data)=>{if(data.fatal)playerStatus.textContent='Error: '+data.type;});
   } else if(url.match(/\.(mp4)$/i)) {
-    videoPlayer.src=url; videoPlayer.load(); videoPlayer.play();
-    videoPlayer.onplay=videoPlayer.onpause=()=>{playPauseBtn.innerHTML=`<i data-feather="${videoPlayer.paused?'play':'pause'}"></i>`; updateIcons();}
+    videoPlayer.src=url; videoPlayer.load(); videoPlayer.play().catch(e=>{showSnackbar("Playback failed: "+e.message,'error');});
     loadingOverlay.style.display='none';playerStatus.textContent='Now Playing (MP4)';
   } else {
-    videoPlayer.src=url; videoPlayer.load(); videoPlayer.play();
+    videoPlayer.src=url; videoPlayer.load(); videoPlayer.play().catch(e=>{showSnackbar("Playback failed: "+e.message,'error');});
     loadingOverlay.style.display='none';playerStatus.textContent='Playing';
   }
   updateIcons();
 }
+videoPlayer.onplay=videoPlayer.onpause=function(){playPauseBtn.innerHTML=`<i data-feather="${videoPlayer.paused?'play':'pause'}"></i>`; updateIcons();}
+videoPlayer.onvolumechange = function(){
+  muteBtn.innerHTML=`<i data-feather="${videoPlayer.muted?'volume-x':'volume-2'}"></i>`;
+  volumeSlider.value = videoPlayer.volume;
+  updateIcons();
+};
+videoPlayer.ontimeupdate = function() {
+  if (videoPlayer.duration) {
+    progressSlider.value = (videoPlayer.currentTime / videoPlayer.duration) * 100;
+  }
+};
+progressSlider.oninput = function() {
+  if (videoPlayer.duration) {
+    videoPlayer.currentTime = (this.value / 100) * videoPlayer.duration;
+  }
+};
 playPauseBtn.onclick = () => {videoPlayer.paused?videoPlayer.play():videoPlayer.pause();}
 muteBtn.onclick = () => {
   videoPlayer.muted=!videoPlayer.muted;
-  muteBtn.innerHTML=`<i data-feather="${videoPlayer.muted?'volume-x':'volume-2'}"></i>`; updateIcons();
+  updateIcons();
 }
 volumeSlider.oninput = function(){videoPlayer.volume=this.value;}
-videoPlayer.onplay=videoPlayer.onpause=function(){playPauseBtn.innerHTML=`<i data-feather="${videoPlayer.paused?'play':'pause'}"></i>`; updateIcons();}
 fullscreenBtn.onclick = () => {
   if(!document.fullscreenElement){videoPlayer.requestFullscreen?.();}
   else{document.exitFullscreen?.();}
@@ -346,10 +376,13 @@ function renderHistory() {
     li.innerHTML =
       `<span>${baseName}${meta}</span>
       <span class='history-dt'>${dstr}</span>
+      <button class="history-play-btn" data-hidx="${uploadHistory.length-idx-1}" title="Resync"><i data-feather="play-circle"></i></button>
       <button class="history-del-btn" data-hidx="${uploadHistory.length-idx-1}" title="Delete"><i data-feather="x"></i></button>`;
     historyListDiv.appendChild(li);
   });
-  addHistoryBtnHandlers(); updateIcons();
+  addHistoryBtnHandlers();
+  addHistoryPlayHandlers();
+  updateIcons();
 }
 clearAllHistoryBtn.onclick=function(){
   if(confirm('Delete all upload history?')){
@@ -369,6 +402,31 @@ function addHistoryBtnHandlers() {
     }
   });
 }
+function addHistoryPlayHandlers() {
+  Array.from(document.querySelectorAll('.history-play-btn')).forEach(btn=>{
+    btn.onclick = function(){
+      let idx = parseInt(this.getAttribute('data-hidx'));
+      let hist = uploadHistory[idx];
+      let txt = hist.txt;
+      if (!txt && hist.cacheKey && playlistCache[hist.cacheKey]) {
+        txt = playlistCache[hist.cacheKey];
+      }
+      if (!txt) {
+        showSnackbar("Playlist file/data not found.", 'warn');
+        return;
+      }
+      allChannels = channels = parsePlaylist(txt);
+      renderChannels();
+      playerStatus.textContent = 'Resynced from history';
+      autoPlayFirstChannel();
+      noticeShow("Playlist loaded from history.<br>Select a channel or play directly.");
+      if(hist.cacheKey && playlistCache[hist.cacheKey]) {
+        savePlaylistOffline(hist.cacheKey, txt);
+      }
+      updateIcons();
+    }
+  });
+}
 window.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
     noticeHide();
@@ -376,8 +434,20 @@ window.addEventListener('keydown',e=>{
     if(uploadPanelBg.classList.contains('open')) uploadPanelBg.classList.remove('open');
     updateIcons();
   }
+
+  // Keyboard shortcut to change channel left/right
+  if((e.key === "ArrowRight" || e.key === "ArrowLeft") && (channels.length > 1 || allChannels.length > 1) && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") {
+    let activeChannels = channels.length > 1 ? channels : allChannels; // Fallback to all if favorites too small
+    let idx = currentPlayingChannel ? activeChannels.findIndex(c => c.url === currentPlayingChannel.url) : -1;
+    if (idx === -1) idx = 0;
+    let dir = e.key === "ArrowRight" ? 1 : -1;
+    let nextIdx = (idx + dir + activeChannels.length) % activeChannels.length;
+    playChannel(activeChannels[nextIdx]);
+    showHeaderBarForAWhile();
+    e.preventDefault();
+  }
 });
-window.addEventListener('DOMContentLoaded',()=>{
+document.addEventListener('DOMContentLoaded',()=>{
   currentChannel.textContent="";playerStatus.textContent="";
   noticeShow(
     'Welcome!<br><br>'+
@@ -414,7 +484,7 @@ document.querySelector('.player-controls').addEventListener('click', function(e)
 document.querySelector('.player-controls').addEventListener('touchstart', function(e) { e.stopPropagation(); });
 setTimeout(() => { bar.classList.add('hide'); }, 2000);
 
-// Smooth and continuous left/right swipe gesture for mobile/touch
+// Smooth and continuous left/right swipe gesture for mobile/touch (continuous for channel change)
 let touchStartX = null;
 let touchStartY = null;
 let lastSwipeTime = 0;
@@ -433,8 +503,13 @@ document.getElementById('player-container').addEventListener('touchend', functio
     if(Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy)) {
       const now = Date.now();
       if (now - lastSwipeTime > 80) {
-        swipeChannel(dx < 0 ? +1 : -1);
+        if (dx < 0) {
+          swipeChannel(+1);    // Left swipe = next channel
+        } else {
+          swipeChannel(-1);    // Right swipe = previous channel
+        }
         lastSwipeTime = now;
+        showHeaderBarForAWhile();
       }
     } else if(Math.abs(dx) < 7 && Math.abs(dy) < 7) {
       showHeaderBarForAWhile();
@@ -444,13 +519,12 @@ document.getElementById('player-container').addEventListener('touchend', functio
   touchStartY = null;
 }, {passive:true});
 function swipeChannel(dir) {
-  if (channels && channels.length > 1) {
-    let idx = channels.findIndex(c =>
-      videoPlayer.currentSrc && (c.url && videoPlayer.currentSrc.indexOf(c.url) !== -1)
-    );
+  let activeChannels = channels.length > 1 ? channels : allChannels; // Fallback for favorites
+  if (activeChannels && activeChannels.length > 1) {
+    let idx = currentPlayingChannel ? activeChannels.findIndex(c => c.url === currentPlayingChannel.url) : -1;
     if (idx === -1) idx = 0;
-    let nextIdx = (idx + dir + channels.length) % channels.length;
-    playChannel(channels[nextIdx]);
+    let nextIdx = (idx + dir + activeChannels.length) % activeChannels.length;
+    playChannel(activeChannels[nextIdx]);
   }
 }
 if(window.innerWidth < 600) {
